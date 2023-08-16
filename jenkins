@@ -1,0 +1,69 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_DEFAULT_REGION = 'your-aws-region'
+        ECR_REPO_NAME = 'your-ecr-repo-name'
+        DOCKER_IMAGE_TAG = 'latest'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    def mavenHome = tool name: 'Maven3', type: 'maven'
+                    def mavenCmd = "${mavenHome}/bin/mvn"
+                    sh mv {all the code to} /apps
+                    sh "${mavenCmd} clean install"
+                    
+                }
+            }
+        }
+        
+        stage('Docker Build') {
+            steps {
+                script {
+                    // Build the Docker image
+                    sh "docker build -t ${ECR_REPO_NAME}:${DOCKER_IMAGE_TAG} ."
+                }
+            }
+        }
+        
+        stage('ECR Login') {
+            steps {
+                script {
+                    // Log in to AWS ECR
+                    withCredentials([string(credentialsId: 'your-ecr-credentials-id', variable: 'AWS_ACCESS_KEY_ID'),
+                                     string(credentialsId: 'your-ecr-credentials-id', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh "aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                    }
+                }
+            }
+        }
+        
+        stage('Push to ECR') {
+            steps {
+                script {
+                    // Push the Docker image to ECR
+                    sh "docker tag ${ECR_REPO_NAME}:${DOCKER_IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO_NAME}:${DOCKER_IMAGE_TAG}"
+                    sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO_NAME}:${DOCKER_IMAGE_TAG}"
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Build and tests passed - ready for deployment'
+        }
+        failure {
+            echo 'Build or tests failed - please check the logs'
+        }
+    }
+}
